@@ -24,14 +24,18 @@ def btsd_flist_reader(flist):
     """
     flist format: [camera]/[image];[x1];[y1];[x2];[y2];[class id];[superclass id];
     """
+    imdict = {}
     imlist = []
+    speed_limit_class_id = '65'   # class id 65 is speed limit (superclass id 2)
     with open(flist, 'r') as rf:
         for line in rf.readlines():
             if line[:2] in ['00', '01']:
                 annotations = line.split(';')
                 impath = annotations[0]
-                imlabel = 1 if annotations[5] == '65' else 0    # class id 65 is speed limit (superclass id 2)
-                imlist.append((impath, imlabel))
+                imlabel = 1 if annotations[5] == speed_limit_class_id else 0
+                if impath not in imdict or imdict[impath] != 1:
+                    imdict[impath] = imlabel
+    imlist = list(imdict.items())
 
     return imlist
 
@@ -48,7 +52,7 @@ train_loader = torch.utils.data.DataLoader(
                   flist="./data/BelgiumTSD/BelgiumTSD_annotations/BTSD_training_GTclear.txt",
                   transform=data_transform,
                   flist_reader=btsd_flist_reader),
-    batch_size=4, shuffle=False,
+    batch_size=8, shuffle=True,
     num_workers=4, pin_memory=True)
 
 val_loader = torch.utils.data.DataLoader(
@@ -56,7 +60,7 @@ val_loader = torch.utils.data.DataLoader(
                   flist="./data/BelgiumTSD/BelgiumTSD_annotations/BTSD_testing_GTclear.txt",
                   transform=data_transform,
                   flist_reader=btsd_flist_reader),
-    batch_size=4, shuffle=True,
+    batch_size=8, shuffle=True,
     num_workers=4, pin_memory=True)
 
 
