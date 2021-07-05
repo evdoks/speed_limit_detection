@@ -1,6 +1,7 @@
 # uprade pip to the latest version to avoid issues installing pytorch on MacOS: pip install --upgrade pip
 torch==1.9.0
 torchvision==0.10.0
+pillow==8.2.0   # fix for https://github.com/pytorch/pytorch/issues/61125#issuecomment-872624273
 matplotlib
 ipython
 flake8

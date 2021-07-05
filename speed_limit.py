@@ -39,7 +39,8 @@ def btsd_flist_reader(flist):
     speed_limit_class_id = '65'  # class id 65 is speed limit (superclass id 2)
     with open(flist, 'r') as rf:
         for line in rf.readlines():
-            if line[:2] in ['00', '01']:
+            #  if line[:2] in ['00', '01']:
+            if line[:2] in ['00']:
                 annotations = line.split(';')
                 impath = annotations[0]
                 imlabel = 1 if annotations[5] == speed_limit_class_id else 0
@@ -56,26 +57,6 @@ data_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
-
-train_loader = torch.utils.data.DataLoader(ImageFilelist(
-    root="./data/BelgiumTSD/",
-    flist="./data/BelgiumTSD/BelgiumTSD_annotations/BTSD_training_GTclear.txt",
-    transform=data_transform,
-    flist_reader=btsd_flist_reader),
-                                           batch_size=64,
-                                           shuffle=True,
-                                           num_workers=4,
-                                           pin_memory=True)
-
-val_loader = torch.utils.data.DataLoader(ImageFilelist(
-    root="./data/BelgiumTSD/",
-    flist="./data/BelgiumTSD/BelgiumTSD_annotations/BTSD_testing_GTclear.txt",
-    transform=data_transform,
-    flist_reader=btsd_flist_reader),
-                                         batch_size=64,
-                                         shuffle=True,
-                                         num_workers=4,
-                                         pin_memory=True)
 
 image_datasets = {
     'train':
@@ -117,11 +98,10 @@ def imshow(inp, title=None):
     plt.pause(0.001)  # pause a bit so that plots are updated
 
 
-train_loader_iter = iter(train_loader)
+inputs, classes = next(iter(dataloaders['train']))
 
 # %%
 # Get a batch of training data
-inputs, classes = next(train_loader_iter)
 
 # Make a grid from batch
 out = torchvision.utils.make_grid(inputs)
