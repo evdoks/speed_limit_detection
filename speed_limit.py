@@ -1,3 +1,15 @@
+'''
+End-to-end speed limit detection
+Dataset: https://btsd.ethz.ch/shareddata/
+Download and unpack following files
+
+* https://btsd.ethz.ch/shareddata/BelgiumTS/Annotations/camera00.tar
+* https://btsd.ethz.ch/shareddata/BelgiumTS/Annotations/camera01.tar
+* https://btsd.ethz.ch/shareddata/BelgiumTS/BelgiumTSD_annotations.zip
+
+into ./data/BelgiumTSD directory
+'''
+
 from __future__ import print_function, division
 
 import torch
@@ -190,6 +202,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     return model
 
 # %%
+# Generic function to display predictions for a few images
 
 
 def visualize_model(model, num_images=6):
@@ -220,6 +233,7 @@ def visualize_model(model, num_images=6):
 
 
 # %%
+# Load a pretrained model and reset final fully connected layer.
 
 model_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
@@ -238,6 +252,50 @@ optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
 # %%
+# Train and evaluate the model
 
 model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
                        num_epochs=1)
+
+# %%
+# Visualize few predictions
+
+visualize_model(model_ft)
+
+# %%
+# ConvNet as fixed feature extractor
+# Here, we need to freeze all the network except the final layer. We need to set requires_grad == False to
+# freeze the parameters so that the gradients are not computed in backward().
+
+model_conv = torchvision.models.resnet18(pretrained=True)
+for param in model_conv.parameters():
+    param.requires_grad = False
+
+# Parameters of newly constructed modules have requires_grad=True by default
+num_ftrs = model_conv.fc.in_features
+model_conv.fc = nn.Linear(num_ftrs, 2)
+
+model_conv = model_conv.to(device)
+
+criterion = nn.CrossEntropyLoss()
+
+# Observe that only parameters of final layer are being optimized as
+# opposed to before.
+optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
+
+# Decay LR by a factor of 0.1 every 7 epochs
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
+
+# %%
+# Train and evaluate
+
+model_conv = train_model(model_conv, criterion, optimizer_conv,
+                         exp_lr_scheduler, num_epochs=25)
+
+# %%
+# Visualize few predictions
+
+visualize_model(model_conv)
+
+plt.ioff()
+plt.show()
