@@ -31,6 +31,7 @@ class ImageFilelist(data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.loader = loader
+        self.targets = [x[1] for x in self.imlist]
 
     def __getitem__(self, index):
         impath, target = self.imlist[index]
