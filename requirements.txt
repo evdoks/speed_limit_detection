@@ -6,3 +6,4 @@ matplotlib
 ipython
 flake8
 yapf
+pdbpp
