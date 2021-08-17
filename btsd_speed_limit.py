@@ -39,8 +39,7 @@ def btsd_flist_reader(flist):
     speed_limit_class_id = '65'  # class id 65 is speed limit (superclass id 2)
     with open(flist, 'r') as rf:
         for line in rf.readlines():
-            #  if line[:2] in ['00', '01']:
-            if line[:2] in ['00']:
+            if line[:2] in ['00', '01']:
                 annotations = line.split(';')
                 impath = annotations[0]
                 imlabel = 1 if annotations[5] == speed_limit_class_id else 0
@@ -98,10 +97,9 @@ def imshow(inp, title=None):
     plt.pause(0.001)  # pause a bit so that plots are updated
 
 
-inputs, classes = next(iter(dataloaders['train']))
-
 # %%
 # Get a batch of training data
+inputs, classes = next(iter(dataloaders['train']))
 
 # Make a grid from batch
 out = torchvision.utils.make_grid(inputs)
@@ -185,7 +183,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 # Generic function to display predictions for a few images
 
 
-def visualize_model(model, num_images=6):
+def visualize_model(model, num_images=64):
     was_training = model.training
     model.eval()
     images_so_far = 0
@@ -235,7 +233,7 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 # Train and evaluate the model
 
 model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=1)
+                       num_epochs=25)
 
 # %%
 # Visualize few predictions
@@ -270,7 +268,7 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 # Train and evaluate
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=25)
+                         exp_lr_scheduler, num_epochs=100)
 
 # %%
 # Visualize few predictions
