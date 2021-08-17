@@ -45,3 +45,28 @@ class ImageFilelist(data.Dataset):
 
     def __len__(self):
         return len(self.imlist)
+
+
+class ImageAnnotationfiles(data.Dataset):
+    def __init__(self, root, flist, annotations_dir, images_dir, transform=None, target_transform=None,
+                 annotations_reader=None, loader=default_loader):
+        self.root = root
+        self.imlist = annotations_reader(root, flist, annotations_dir, images_dir)
+        self.transform = transform
+        self.target_transform = target_transform
+        self.loader = loader
+        self.targets = [x[1] for x in self.imlist]
+
+    def __getitem__(self, index):
+        impath, target = self.imlist[index]
+        img = self.loader(os.path.join(self.root, impath))
+        if self.transform is not None:
+            img = self.transform(img)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target
+
+    def __len__(self):
+        return len(self.imlist)
+
