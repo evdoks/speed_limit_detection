@@ -123,8 +123,8 @@ if OTHER_SIGN_LABEL is None and BACKGROUND_IMAGES_RATIO > 0:
         new_labels_path = f'{NEW_DATASET_PATH}/labels/{s}'
 
         try:
-            os.makedirs(f'{new_images_path}')
-            os.makedirs(f'{new_labels_path}')
+            os.makedirs(new_images_path)
+            os.makedirs(new_labels_path)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
