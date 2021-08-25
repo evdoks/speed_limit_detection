@@ -7,7 +7,7 @@ import shutil
 import json
 import random
 
-LABEL_GROUPS = ['regulatory--maximum-speed-limit']
+LABEL_GROUPS = ['regulatory--maximum-speed-limit', 'regulatory--end-of-speed-limit-zone--g1']
 OTHER_SIGN_LABEL = None     # set to None to ignore labels not in LABEL_GROUPS
 BACKGROUND_IMAGES_RATIO = 0.1
 DATASET_PATH = '../../datasets/mtsd_v2_fully_annotated'
