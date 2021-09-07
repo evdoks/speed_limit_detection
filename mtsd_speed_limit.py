@@ -26,7 +26,7 @@ import os
 import json
 
 from file_list import MTSDDataset
-from data.mtsd_v2_fully_annotated import visualize_example
+from visualize_example import load_annotation, visualize_gt
 
 plt.ion()  # interactive mode
 
@@ -40,16 +40,16 @@ data_transform = transforms.Compose(
 
 image_datasets = {
     'train':
-    MTSDDataset(root='./data/mtsd_v2_fully_annotated/',
+    MTSDDataset(root='../datasets/mtsd_v2_fully_annotated/',
                 flist='splits/train.txt',
                 annotations_dir='annotations/',
-                images_dir='images/',
+                images_dir='images/train/',
                 transform=data_transform),
     'val':
-    MTSDDataset(root='./data/mtsd_v2_fully_annotated/',
+    MTSDDataset(root='../datasets/mtsd_v2_fully_annotated/',
                 flist='splits/val.txt',
                 annotations_dir='annotations/',
-                images_dir='images/',
+                images_dir='images/val/',
                 transform=data_transform)
 }
 dataloaders = {
@@ -67,8 +67,8 @@ inputs, classes = next(iter(dataloaders['train']))
 image_key = inputs
 
 # load the annotation json
-anno = visualize_example.load_annotation(image_key)
+anno = load_annotation(image_key)
 
 # visualize traffic sign boxes on the image
-vis_img = visualize_example.visualize_gt(image_key, anno)
+vis_img = visualize_gt(image_key, anno)
 vis_img.show()

@@ -63,15 +63,16 @@ class MTSDDataset(data.Dataset):
                  target_transform=None,
                  loader=default_loader):
         self.root = root
-        self.imlist = self.annotations_reader(root, flist, annotations_dir, images_dir)
+        self.flist = flist
+        self.imlist = self._mtsd_annotations_reader(root, annotations_dir, images_dir)
         self.transform = transform
         self.target_transform = target_transform
         self.loader = loader
         self.targets = [x[1] for x in self.imlist]
 
-    def mtsd_annotations_reader(self, root, flist, annotations_dir, images_dir):
+    def _mtsd_annotations_reader(self, root, annotations_dir, images_dir):
         imlist = []
-        with open(os.path.join(root, flist), 'r') as rf:
+        with open(os.path.join(root, self.flist), 'r') as rf:
             for line in rf.readlines():
                 impath = os.path.join(root, images_dir, line.rstrip() + '.jpg')
                 anpath = os.path.join(root, annotations_dir, line.rstrip() + '.json')
