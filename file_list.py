@@ -1,4 +1,4 @@
-# Image loader for images and lables listed in a file
+# Image loaders for images and lables must be listed in a separate file
 # see https://github.com/pytorch/vision/issues/81
 
 from PIL import Image

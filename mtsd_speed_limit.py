@@ -31,6 +31,9 @@ from data.mtsd_v2_fully_annotated import visualize_example
 plt.ion()  # interactive mode
 
 # %%
+"""
+Data loader for original Mapillary MTSD dataset with two classes: 1 for an image with a speed limit and 0 without
+"""
 
 
 def mtsd_annotations_reader(root, flist, annotations_dir, images_dir):
