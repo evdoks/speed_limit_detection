@@ -7,7 +7,7 @@ from PIL import Image
 from shapely.geometry import Polygon
 import glob
 import errno
-import random
+
 
 DATASET_PATH = '../../datasets/mtsd_speed_limits'
 NEW_DATASET_PATH = '../../datasets/mtsd_speed_limits_sliced'
@@ -18,11 +18,12 @@ SETS = ['train', 'val']
 # specify slice width=height
 SLIZE_SIZE = 512
 
-# consider only slices with bounding box with a larger width or height
+# consider only slices with bounding box with a larger width or height and containing at least a certain fraction of it
 MAX_HIGHT_WIDTH_RATIO = 1.5
+MIN_INTERCECTION_RATIO = 0.5
 
 # ratio of background images
-BACKGROUND_IMAGES_RATIO = 0.1
+BACKGROUND_IMAGES_RATIO = 0.5
 
 
 def slice_dataset():
@@ -44,7 +45,6 @@ def slice_dataset():
 
     for s in SETS:
         images_path = f'{DATASET_PATH}/images/{s}'
-        labels_path = f'{DATASET_PATH}/labels/{s}'
         new_images_path = f'{NEW_DATASET_PATH}/images/{s}'
         new_labels_path = f'{NEW_DATASET_PATH}/labels/{s}'
 
@@ -58,7 +58,8 @@ def slice_dataset():
         # get all image names
         imnames = glob.glob(f'{images_path}/*.jpg')
 
-        background_img_prob = BACKGROUND_IMAGES_RATIO / len(glob.glob(f'{labels_path}/*.txt'))
+        image_count = 0
+        background_count = 0
 
         # tile all images in a loop
         for imname in imnames:
@@ -107,6 +108,9 @@ def slice_dataset():
                         if pol.intersects(box[1]):
                             inter = pol.intersection(box[1])
 
+                            if inter.area / box[1].area < MIN_INTERCECTION_RATIO:
+                                continue
+
                             # get the smallest polygon (with sides parallel to the axes) that contains the intersection
                             new_box = inter.envelope
 
@@ -115,9 +119,6 @@ def slice_dataset():
 
                             # get coordinates of polygon vertices
                             x, y = new_box.exterior.coords.xy
-
-                            #  if 'Q_gRc3WeJzMd7MEuUgD-wQ' in imname:
-                            #      breakpoint()
 
                             if not (1 / MAX_HIGHT_WIDTH_RATIO < float(max(x) - min(x)) /
                                     (max(y) - min(y)) < MAX_HIGHT_WIDTH_RATIO):
@@ -144,6 +145,7 @@ def slice_dataset():
                                 print(slice_path)
                                 sliced_im.save(slice_path)
                                 imsaved = True
+                                image_count += 1
 
                     # save txt with labels for the current tile
                     if len(slice_labels) > 0:
@@ -152,11 +154,13 @@ def slice_dataset():
                         slice_df.to_csv(slice_labels_path, sep=' ', index=False, header=False, float_format='%.6f')
 
                     # if there are no bounding boxes intersect current tile, save this tile to a separate folder
-                    if not imsaved and background_img_prob and random.random() < background_img_prob:
+                    if not imsaved and image_count != 0 and float(
+                            background_count) / image_count < BACKGROUND_IMAGES_RATIO:
                         sliced = imr[i * SLIZE_SIZE:(i + 1) * SLIZE_SIZE, j * SLIZE_SIZE:(j + 1) * SLIZE_SIZE]
                         sliced_im = Image.fromarray(sliced)
                         filename = imname.split('/')[-1]
                         slice_path = f"{new_images_path}/{filename.replace('.jpg', f'_{i}_{j}.jpg')}"
+                        background_count += 1
 
                         sliced_im.save(slice_path)
                         print('Slice without boxes saved')
