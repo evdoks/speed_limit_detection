@@ -4,6 +4,7 @@ from glob import glob
 from torch import optim, cuda
 from torchvision import transforms, datasets, models
 from torch.utils.data import DataLoader
+from torch.hub import load_state_dict_from_url
 from PIL import Image
 import matplotlib.pyplot as plt
 import torch
@@ -11,20 +12,21 @@ import torch.nn as nn
 import pandas as pd
 from timeit import default_timer as timer
 
-# %%
-# find labels that correspond to a speed limit sign
+# %% find labels that correspond to a speed limit sign
 
 dataset_path = '../datasets/mtsd_speed_limits_sliced'
 new_dataset_path = '../datasets/mtsd_speed_limits_sliced_torch'
 
+image_sets = ['train', 'val']
+
 class_folder = 'speed_limit'
 no_class_folder = 'no_speed_limit'
 
-# %%
-# create folder structure require by PyTorch ImageFolder dataset loader
+# %% create folder structure require by PyTorch ImageFolder dataset loader
+
 os.system(f"rm -rf {new_dataset_path}")
 os.system(f"mkdir {new_dataset_path}")
-for t in ['train', 'val']:
+for t in image_sets:
     new_path = f'{new_dataset_path}/{t}'
     os.system(f"mkdir {new_path}")
     os.system(f"mkdir {new_path}/{class_folder}")
@@ -37,9 +39,47 @@ for t in ['train', 'val']:
         else:
             os.system(f"cp {i} {new_path}/{no_class_folder}/{os.path.split(i)[1]}")
 
-# %%
-save_file_name = 'resnet18-transfer-speedlim.pt'
-checkpoint_path = 'resnet18-transfer-speedlim.pth'
+# %% Find minimum and maximum resolutions of an image in the dataset
+
+image_size_path = "../datasets/mtsd_speed_limits/images"
+min_width = np.Inf
+min_hight = np.Inf
+min_width_imname = ''
+min_hight_imname = ''
+
+max_width = 0
+max_hight = 0
+max_width_imname = ''
+max_hight_imname = ''
+
+for t in image_sets:
+    imnames = glob(f'{image_size_path}/{t}/*.jpg')
+    for imname in imnames:
+        im = Image.open(imname)
+        if min_width > im.size[0]:
+            min_width = im.size[0]
+            min_width_imname = imname
+        elif max_width < im.size[0]:
+            max_width = im.size[0]
+            max_width_imname = imname
+        if min_hight > im.size[1]:
+            min_hight = im.size[1]
+            min_hight_imname = imname
+        elif max_hight < im.size[1]:
+            max_hight = im.size[1]
+            max_hight_imname = imname
+
+print(f"Min image dimestions: {min_width}x{min_hight}")
+print(f"Image with smallest width: {min_width_imname}")
+print(f"Image with smallest hight: {min_hight_imname}")
+print(f"Max image dimestions: {max_width}x{max_hight}")
+print(f"Image with smallest width: {max_width_imname}")
+print(f"Image with smallest hight: {max_hight_imname}")
+
+# %% Initialize some training parameters
+
+save_file_name = 'resnet18_speedlim.pt'
+checkpoint_path = 'resnet18_speedlim.pth'
 
 # Change to fit hardware
 batch_size = 32
@@ -59,8 +99,8 @@ if train_on_gpu:
         multi_gpu = False
 print(train_on_gpu, multi_gpu)
 
-# %%
-# Image transformations
+# %%  Image transformations
+
 image_transforms = {
     # Train uses data augmentation
     'train':
@@ -103,6 +143,7 @@ def imshow_tensor(image, ax=None, title=None):
 
     return ax, image
 
+
 # %% Visualize image transormation
 
 ex_img = Image.open('../datasets/mtsd_speed_limits_sliced_torch/train/speed_limit/zysNxmnTNk5QJHkr0X1VgQ_2_3.jpg')
@@ -138,17 +179,62 @@ for d in os.listdir(traindir):
 n_classes = len(categories)
 print(f'There are {n_classes} different classes.')
 
-# %% Create Models
+# %% ResNet18 model with fully connected layer replaced by a convolutional layer to accomodate arbitrary input sizes
+# See https://learnopencv.com/fully-convolutional-image-classification-on-arbitrary-sized-image/
+
+
+class FullyConvolutionalResnet18(models.ResNet):
+    def __init__(self, num_classes=1000, pretrained=False, **kwargs):
+
+        # Start with standard resnet18 defined here
+        super().__init__(block=models.resnet.BasicBlock, layers=[2, 2, 2, 2], num_classes=num_classes, **kwargs)
+        if pretrained:
+            state_dict = load_state_dict_from_url(models.resnet.model_urls["resnet18"], progress=True)
+            self.load_state_dict(state_dict)
+
+        # Replace AdaptiveAvgPool2d with standard AvgPool2d
+        self.avgpool = nn.AvgPool2d((7, 7))
+
+        # Convert the original fc layer to a convolutional layer.
+        self.last_conv = torch.nn.Conv2d(in_channels=self.fc.in_features, out_channels=num_classes, kernel_size=1)
+        self.last_conv.weight.data.copy_(self.fc.weight.data.view(*self.fc.weight.data.shape, 1, 1))
+        self.last_conv.bias.data.copy_(self.fc.bias.data)
+
+    # Reimplementing forward pass.
+    def _forward_impl(self, x):
+        # Standard forward for resnet18
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+
+        # Notice, there is no forward pass
+        # through the original fully connected layer.
+        # Instead, we forward pass through the last conv layer
+        x = self.last_conv(x)
+        return x
+
+
+model = FullyConvolutionalResnet18(pretrained=False, num_classes=n_classes).eval()
+
+# %% Resnet18 model with fully connected layer updated to predict our classes
 
 model = models.resnet18(pretrained=True)
 
-# Freeze model weights
+# Freeze model weights to rely purely on transfer learning
 #  for param in model.parameters():
 #      param.requires_grad = False
 
-n_inputs = model.fc.in_features
-model.fc = nn.Sequential(nn.Linear(n_inputs, 256), nn.ReLU(), nn.Dropout(0.4), nn.Linear(256, n_classes),
+num_ftrs = model.fc.in_features
+model.fc = nn.Sequential(nn.Linear(num_ftrs, 256), nn.ReLU(), nn.Dropout(0.4), nn.Linear(256, n_classes),
                          nn.LogSoftmax(dim=1))
+#  model.fc = nn.Linear(num_ftrs, n_classes)
 
 if train_on_gpu:
     model = model.to('cuda')
@@ -253,7 +339,8 @@ def train(model,
             # Track training progress
             print(
                 f'Epoch: {epoch}\t{100 * (ii + 1) / len(train_loader):.2f}% complete. {timer() - start:.2f} '
-                'seconds elapsed in epoch.', end='\r')
+                'seconds elapsed in epoch.',
+                end='\r')
 
         # After training loops ends, start validation
         else:
@@ -315,10 +402,8 @@ def train(model,
                     epochs_no_improve += 1
                     # Trigger early stopping
                     if epochs_no_improve >= max_epochs_stop:
-                        print(
-                            f'\nEarly Stopping! Total epochs: {epoch}. Best epoch: {best_epoch} with loss: '
-                            '{valid_loss_min:.2f} and acc: {100 * valid_acc:.2f}%'
-                        )
+                        print(f'\nEarly Stopping! Total epochs: {epoch}. Best epoch: {best_epoch} with loss: '
+                              '{valid_loss_min:.2f} and acc: {100 * valid_acc:.2f}%')
                         total_time = timer() - overall_start
                         print(
                             f'{total_time:.2f} total seconds elapsed. {total_time / (epoch+1):.2f} seconds per epoch.')
@@ -345,32 +430,31 @@ def train(model,
 
 # %% train the model
 
-model, history = train(
-    model,
-    criterion,
-    optimizer,
-    dataloaders['train'],
-    dataloaders['val'],
-    save_file_name=save_file_name,
-    max_epochs_stop=100,
-    n_epochs=100,
-    print_every=1)
+model, history = train(model,
+                       criterion,
+                       optimizer,
+                       dataloaders['train'],
+                       dataloaders['val'],
+                       save_file_name=save_file_name,
+                       max_epochs_stop=10,
+                       n_epochs=5,
+                       print_every=1)
 
 # %% training and validation losses
+
 plt.figure(figsize=(8, 6))
 for c in ['train_loss', 'valid_loss']:
-    plt.plot(
-        history[c], label=c)
+    plt.plot(history[c], label=c)
 plt.legend()
 plt.xlabel('Epoch')
 plt.ylabel('Average Negative Log Likelihood')
 plt.title('Training and Validation Losses')
 
 # %% training and validation accuracy
+
 plt.figure(figsize=(8, 6))
 for c in ['train_acc', 'valid_acc']:
-    plt.plot(
-        100 * history[c], label=c)
+    plt.plot(100 * history[c], label=c)
 plt.legend()
 plt.xlabel('Epoch')
 plt.ylabel('Average Accuracy')
@@ -394,8 +478,7 @@ def save_checkpoint(model, path):
     """
 
     model_name = path.split('-')[0]
-    assert (model_name in ['vgg16', 'resnet18'
-                           ]), "Path must have the correct model name"
+    assert (model_name in ['vgg16', 'resnet18']), "Path must have the correct model name"
 
     # Basic details
     checkpoint = {
@@ -452,8 +535,7 @@ def load_checkpoint(path):
 
     # Get the model name
     model_name = path.split('-')[0]
-    assert (model_name in ['vgg16', 'resnet18'
-                           ]), "Path must have the correct model name"
+    assert (model_name in ['vgg16', 'resnet18']), "Path must have the correct model name"
 
     # Load in checkpoint
     checkpoint = torch.load(path)
@@ -477,8 +559,7 @@ def load_checkpoint(path):
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f'{total_params:,} total parameters.')
-    total_trainable_params = sum(
-        p.numel() for p in model.parameters() if p.requires_grad)
+    total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'{total_trainable_params:,} total gradient parameters.')
 
     # Move to gpu
@@ -575,9 +656,7 @@ def predict(image_path, model, topk=5):
         topk, topclass = ps.topk(topk, dim=1)
 
         # Extract the actual classes and probabilities
-        top_classes = [
-            model.idx_to_class[class_] for class_ in topclass.cpu().numpy()[0]
-        ]
+        top_classes = [model.idx_to_class[class_] for class_ in topclass.cpu().numpy()[0]]
         top_p = topk.cpu().numpy()[0]
 
         return img_tensor.cpu().squeeze(), top_p, top_classes, real_class
@@ -591,7 +670,7 @@ def random_test_image():
     return img_path
 
 
-# %%
+# %% Make prediction on a radnom image
 
 np.random.seed = 100
 
@@ -599,3 +678,18 @@ test_image = random_test_image()
 _ = imshow_tensor(process_image(random_test_image()))
 img, top_p, top_classes, real_class = predict(random_test_image(), model, topk=2)
 print(top_p, top_classes, real_class)
+
+# %% Convert pt model to ONNX
+
+dummy_input = torch.randn(1, 3, 224, 224)
+dummy_input = dummy_input.to('cuda')
+input_names = ["actual_input"]
+output_names = ["output"]
+torch.onnx.export(model,
+                  dummy_input,
+                  "resnet18_speedlim.onnx",
+                  verbose=False,
+                  input_names=input_names,
+                  output_names=output_names,
+                  export_params=True,
+                  )
